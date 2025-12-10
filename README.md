@@ -1,9 +1,9 @@
 ![vLLM Kunlun Logo](vllm_kunlun/patches/vLLM_Kunlun.jpg)
 
 <p align="center">
-  <a href="./docs/_build/html/documentation.html"><b>Documentation</b></a> |
+  <a href="https://vllm-kunlun.readthedocs.io/en/latest/"><b>Documentation</b></a> |
   <a href=""><b>Users Forum</b></a> |
-  <a href="join.slack.com/t/vllm-kunlun/shared_invite/zt-3iinb8u5z-FcqZKbNNdMJ_32fHmipzvwjoin.slack.com/t/vllm-kunlun/shared_invite/zt-3iinb8u5z-FcqZKbNNdMJ_32fHmipzvw"><b>slack</b></a> |
+  <a href="https://vllm-kunlun.slack.com/"><b>slack</b></a> |
 </p>
 
 ---
@@ -298,7 +298,7 @@ Please use the following recommended versions to get started quickly:
 
 | Version | Release type | Doc |
 |----------|---------------|-----|
-| v0.10.1.1 | Latest stable version | [QuickStart](./docs/_build/html/quick_start.html) and [Installation](./docs/_build/html/installation.html) for more details |
+| v0.10.1.1 | Latest stable version | [QuickStart](https://vllm-kunlun.readthedocs.io/en/latest/quick_start.html) and [Installation](https://vllm-kunlun.readthedocs.io/en/latest/installation.html) for more details |
 
 ---
 
