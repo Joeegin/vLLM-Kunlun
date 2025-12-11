@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from typing import Optional
-
+import os
 import torch
 import torch.nn as nn
 from packaging import version
