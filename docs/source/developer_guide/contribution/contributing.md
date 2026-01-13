@@ -4,7 +4,7 @@
 It's recommended to set up a local development environment to build vllm-kunlun and run tests
 before you submit a PR.
 
-#### Run models locally
+### Run models locally
 
 After completing Run lint setup which is shown in quicksatrt, you can run your changed locally:
 
@@ -40,7 +40,7 @@ python -m vllm.entrypoints.openai.api_server \
 ```
 Please save a screenshot of your service running successfully, and attach an accuracy report.
 
-#### Submit the commit
+### Submit the commit
 
 ```bash
 # Commit changed files using `-s`
@@ -74,10 +74,3 @@ If the PR spans more than one category, please include all relevant prefixes.
 ## Others
 
 If you find any problem when contributing, you can join our slack group to talk with us and then feel free to submit a PR to improve the doc to help other developers. 
-
-:::{toctree}
-:caption: Index
-:maxdepth: 1
-testing
-multi_node_test
-:::
