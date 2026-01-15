@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   test-kunlun:
-  
+
     runs-on: [self-hosted, test-0]
       # 2. 【关键】全局环境变量
       # 放在这里，整个 Job 的所有步骤（包括 checkout 和 pip）都会自动生效
@@ -74,7 +74,7 @@ jobs:
 
           # 3. 安装昆仑特定包 (如果 requirements.txt 里没包含这些，请保留)
           wget -O xpytorch-cp310-torch251-ubuntu2004-x64.run https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xpytorch-cp310-torch251-ubuntu2004-x64.run?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-02T05%3A01%3A27Z%2F-1%2Fhost%2Ff3cf499234f82303891aed2bcb0628918e379a21e841a3fac6bd94afef491ff7
-          bash xpytorch-cp310-torch251-ubuntu2004-x64.run
+          sudo bash xpytorch-cp310-torch251-ubuntu2004-x64.run
           
           # 如果 requirements.txt 里已经有了下面这些 whl 的地址，这几行可以删掉
           pip install "https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xtorch_ops-0.1.2209%2B6752ad20-cp310-cp310-linux_x86_64.whl?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-05T06%3A18%3A00Z%2F-1%2Fhost%2F14936c2b7e7c557c1400e4c467c79f7a9217374a7aa4a046711ac4d948f460cd"
