@@ -4,90 +4,55 @@ on: [push, pull_request]
 
 jobs:
   test-kunlun:
-
+    # 既然是 Root 运行 Runner，直接跑在宿主机 (容器内) 即可
     runs-on: [self-hosted, test-0]
-      # 2. 【关键】全局环境变量
-      # 放在这里，整个 Job 的所有步骤（包括 checkout 和 pip）都会自动生效
+
     env:
       http_proxy: http://10.63.229.53:8891
       https_proxy: http://10.63.229.53:8891
-      # 建议加上 no_proxy，防止连接本地服务或内网 git 出问题
       no_proxy: localhost,127.0.0.1,0.0.0.0,.baidu.com,.baidu-int.com
-      # 显式指定 vLLM 编译目标，防止安装主库时因为它去瞎找 CUDA 驱动而报错
+      # 即使环境装好了，这个变量最好留着，防止某些内部逻辑会有偏差
       VLLM_TARGET_DEVICE: empty 
-    
 
     steps:
-      # --- 第一步：环境配置 ---
+      # --- 第一步：环境“指路” ---
+      # 只要把 PATH 指过去，后面的 python/pip/pytest 就全是那个环境里的了
       - name: Configure Environment
         run: |
           CONDA_BIN="/root/miniconda/envs/python310_torch25_cuda/bin"
+          
+          # 1. 强制将 Conda bin 目录加到系统 PATH 最前面
           echo "$CONDA_BIN" >> $GITHUB_PATH
-          echo "VLLM_TARGET_DEVICE=empty" >> $GITHUB_ENV
-          echo "SETUPTOOLS_SCM_PRETEND_VERSION=0.11.0" >> $GITHUB_ENV
-
-      # --- 第二步：并行拉取代码 ---
-      - name: Checkout upstream vllm
-        uses: actions/checkout@v4
-        with:
-          repository: vllm-project/vllm
-          ref: v0.11.0
-          path: ./vllm-upstream
-
-      - name: Checkout vllm-kunlun code
-        uses: actions/checkout@v4
-        with:
-          path: ./vllm-kunlun
-
-      # --- 第三步：安装核心构建工具 (必须手动装) ---
-      - name: Install Build Tools
-        run: |
-          echo "Installing build backends..."
-          # 【重要】无论 requirements.txt 有没有，先强制装好这些构建工具，防止 -e . 报错
-          # hatchling, editables -> 用于 vllm-kunlun 构建
-          # setuptools-scm -> 用于 vllm-upstream 构建
-          python -m pip install cmake ninja packaging setuptools wheel setuptools-scm numpy hatchling editables pytest pytest-cov --default-timeout=100
-
-      # --- 第四步：安装 vLLM 上游主库 ---
-      - name: Install vllm upstream
-        working-directory: ./vllm-upstream
-        run: |
-          export VLLM_TARGET_DEVICE=empty
-          python -m pip install . --no-build-isolation --no-deps --default-timeout=100
-
-      # --- 第五步：安装 vLLM-Kunlun (集成 requirements.txt) ---
-      - name: Install vllm-kunlun
-        working-directory: ./vllm-kunlun
-        run: |
-          echo "1. Installing dependencies from requirements.txt..."
-          # 【这里加入您的需求】先安装 requirements.txt 里的所有包
-          if [ -f requirements.txt ]; then
-            python -m pip install -r requirements.txt --default-timeout=100
-          else
-            echo "Warning: requirements.txt not found!"
-          fi
-
-          echo "2. Installing vllm-kunlun in editable mode..."
-          # 然后再安装本项目
-          # 此时 hatchling 和 editables 已经在第三步装好了，这里不会再报错
-          python -m pip install -v -e . --no-build-isolation --default-timeout=100
-
-          # 3. 安装昆仑特定包 (如果 requirements.txt 里没包含这些，请保留)
-          wget -O xpytorch-cp310-torch251-ubuntu2004-x64.run https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xpytorch-cp310-torch251-ubuntu2004-x64.run?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-02T05%3A01%3A27Z%2F-1%2Fhost%2Ff3cf499234f82303891aed2bcb0628918e379a21e841a3fac6bd94afef491ff7
-          sudo bash xpytorch-cp310-torch251-ubuntu2004-x64.run
           
-          # 如果 requirements.txt 里已经有了下面这些 whl 的地址，这几行可以删掉
-          pip install "https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xtorch_ops-0.1.2209%2B6752ad20-cp310-cp310-linux_x86_64.whl?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-05T06%3A18%3A00Z%2F-1%2Fhost%2F14936c2b7e7c557c1400e4c467c79f7a9217374a7aa4a046711ac4d948f460cd"
-          pip install "https://cce-ai-models.bj.bcebos.com/v1/vllm-kunlun-0.11.0/triton-3.0.0%2Bb2cde523-cp310-cp310-linux_x86_64.whl"
-          pip install "https://cce-ai-models.bj.bcebos.com/XSpeedGate-whl/release_merge/20251219_152418/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl"
+          # 2. 验证一下环境对不对 (调试用)
+          echo "Environment Ready. Will use python from:"
+          echo "$CONDA_BIN"
+
+      # --- 第二步：拉取当前代码 ---
+      # 只需要拉取 vLLM-Kunlun，不需要 upstream，因为镜像里肯定装了 vllm
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # --- 第三步：链接代码 (核心) ---
+      # 这一步不是为了下载包，而是为了让环境用到您“刚写的代码”，而不是“镜像里老的代码”
+      - name: Link Current Code
+        run: |
+          echo "Linking current source code to environment..."
           
-          wget -O xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl https://aihc-private-hcd.bj.bcebos.com/xspeedgate_release/deepseek_v3_2/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64_2601062006.whl?authorization=bce-auth-v1%2FALTAKvz6x4eqcmSsKjQxq3vZdB%2F2026-01-06T12%3A12%3A24Z%2F2592000%2Fhost%2Fa5344c32358a010bb15e42e93d8e536a1e25024ee1f8263fed815418fffdef7f
-          pip install xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl
+          # -e . : Editable 模式，直接把当前文件夹挂载到 Python 库里
+          # --no-deps : 关键！告诉 pip "别检查依赖，我环境里全都有，别给我联网下载"
+          # --no-build-isolation : 关键！直接用环境里的工具，别创建虚拟环境
+          python -m pip install -e . --no-deps --no-build-isolation
 
-
-      # --- 第六步：运行测试 ---
+      # --- 第四步：运行测试 ---
       - name: Run Unit Test
-        working-directory: ./vllm-kunlun
         run: |
-          xpu-smi || echo "Warning: xpu-smi failed"
+          # 1. 确认驱动状态
+          xpu-smi || echo "Warning: xpu-smi command not found"
+          
+          # 2. 确认 pytest 也是用的环境里的
+          which pytest
+          
+          # 3. 跑测试
+          # 此时 pytest 会测试您刚才 checkout 下来的代码
           pytest -v -s --cov tests/ut
