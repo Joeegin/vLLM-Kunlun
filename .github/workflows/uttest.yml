@@ -82,6 +82,9 @@ jobs:
           
           # wget -O xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl https://aihc-private-hcd.bj.bcebos.com/xspeedgate_release/deepseek_v3_2/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64_2601062006.whl?authorization=bce-auth-v1%2FALTAKvz6x4eqcmSsKjQxq3vZdB%2F2026-01-06T12%3A12%3A24Z%2F2592000%2Fhost%2Fa5344c32358a010bb15e42e93d8e536a1e25024ee1f8263fed815418fffdef7f
           # pip install xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl
+          
+          # 强行卸载 transformer_engine 防止 accelerate 瞎引用报错
+          python -m pip uninstall -y transformer_engine || true
 
       # --- 第六步：运行测试 ---
       - name: Run Unit Test
