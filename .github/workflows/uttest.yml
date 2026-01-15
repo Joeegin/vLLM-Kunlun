@@ -1,0 +1,128 @@
+name: Kunlun Unit Test
+
+on: [push, pull_request]
+
+jobs:
+  test-kunlun:
+    runs-on: [self-hosted, test-0]
+    
+    # 1. 容器配置 (复用之前的)
+    container:
+      image: iregistry.baidu-int.com/xmlir/xmlir_ubuntu_2004_x86_64:v0.32
+      # 2. 对应 -v 挂载
+      # 注意：GitHub Actions 会自动挂载当前代码到工作目录，所以不需要手动挂载 workspace
+      volumes:
+        - /home:/home
+        - /ssd1:/ssd1
+        - /ssd2:/ssd2
+        - /ssd3:/ssd3
+        - /usr/local/bin/xpu-smi:/usr/local/bin/xpu-smi
+
+      # 3. 对应 docker run 的各种参数
+      # YAML 里不支持 for 循环，所以设备列表必须显式写出来（或者用 --privileged 直接全放开）
+      options: >-
+        --net=host
+        --cap-add=SYS_PTRACE
+        --security-opt seccomp=unconfined
+        --shm-size=32g
+        --device=/dev/xpuctrl:/dev/xpuctrl
+        --device=/dev/xpu0:/dev/xpu0
+        --device=/dev/xpu1:/dev/xpu1
+        --device=/dev/xpu2:/dev/xpu2
+        --device=/dev/xpu3:/dev/xpu3
+        --device=/dev/xpu4:/dev/xpu4
+        --device=/dev/xpu5:/dev/xpu5
+        --device=/dev/xpu6:/dev/xpu6
+        --device=/dev/xpu7:/dev/xpu7
+      # 2. 【关键】全局环境变量
+      # 放在这里，整个 Job 的所有步骤（包括 checkout 和 pip）都会自动生效
+      env:
+        http_proxy: http://10.63.229.53:8891
+        https_proxy: http://10.63.229.53:8891
+        # 建议加上 no_proxy，防止连接本地服务或内网 git 出问题
+        no_proxy: localhost,127.0.0.1,0.0.0.0,.baidu.com,.baidu-int.com
+        # 显式指定 vLLM 编译目标，防止安装主库时因为它去瞎找 CUDA 驱动而报错
+        VLLM_TARGET_DEVICE: empty 
+    
+
+    steps:
+      # --- 第一阶段：环境准备 ---
+      # 3. 激活 Conda 环境 (修改 PATH 方法)
+      - name: Activate Conda Environment
+        run: |
+          # 假设这是您之前找到的路径，根据实际情况修改
+          CONDA_BIN="/root/miniconda/envs/python310_torch25_cuda"
+          
+          if [ -d "$CONDA_BIN" ]; then
+            echo "$CONDA_BIN" >> $GITHUB_PATH
+            echo "Successfully added $CONDA_BIN to PATH"
+          else
+            echo "Error: Path $CONDA_BIN not found!"
+            exit 1
+          fi
+
+      - name: Verify Environment & Proxy
+        run: |
+          echo "Current Python: $(which python)"
+          echo "Proxy Check: $http_proxy"
+          python --version
+          # 测试一下网络通不通 (可选)
+          curl -I https://pypi.org
+
+      # --- 第二阶段：安装 vLLM 主库 (Upstream) ---
+      
+      - name: Checkout upstream vllm
+        uses: actions/checkout@v4
+        with:
+          repository: vllm-project/vllm
+          ref: v0.11.0  # 【注意】这里建议锁定一个跟你们代码兼容的版本，而不是 main
+          path: ./vllm-upstream  # 下载到子目录，别覆盖了当前代码
+
+      - name: Install vllm upstream
+        working-directory: ./vllm-upstream
+        run: |
+          # 安装 vLLM 主库
+          # 使用 VLLM_TARGET_DEVICE=empty 避免编译 CUDA/ROCm 算子，因为我们要用的是昆仑
+          pip install .
+          
+          # 清理可能冲突的包 (参考 Ascend 流程)
+          # pip uninstall -y triton || true
+
+      # --- 第三阶段：安装 vLLM-Kunlun (当前项目) ---
+
+      - name: Checkout vllm-kunlun code
+        uses: actions/checkout@v4
+        # 默认会拉取到当前工作目录根目录
+
+      - name: Install vllm-kunlun
+        run: |
+          echo "Installing dependencies..."
+          # 假设你有 requirements 文件，没有的话可以去掉这行
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          
+          echo "Installing vllm-kunlun..."
+          # -e . 表示以可编辑模式安装，方便测试代码直接生效
+          # -v 显示详细安装日志
+          pip install -v -e .
+
+          wget -O xpytorch-cp310-torch251-ubuntu2004-x64.run https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xpytorch-cp310-torch251-ubuntu2004-x64.run?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-02T05%3A01%3A27Z%2F-1%2Fhost%2Ff3cf499234f82303891aed2bcb0628918e379a21e841a3fac6bd94afef491ff7
+          bash xpytorch-cp310-torch251-ubuntu2004-x64.run
+
+          pip install "https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xtorch_ops-0.1.2209%2B6752ad20-cp310-cp310-linux_x86_64.whl?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-05T06%3A18%3A00Z%2F-1%2Fhost%2F14936c2b7e7c557c1400e4c467c79f7a9217374a7aa4a046711ac4d948f460cd"
+
+          pip install "https://cce-ai-models.bj.bcebos.com/v1/vllm-kunlun-0.11.0/triton-3.0.0%2Bb2cde523-cp310-cp310-linux_x86_64.whl"
+
+          pip install "https://cce-ai-models.bj.bcebos.com/XSpeedGate-whl/release_merge/20251219_152418/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl"
+
+          wget -O xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl https://aihc-private-hcd.bj.bcebos.com/xspeedgate_release/deepseek_v3_2/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64_2601062006.whl?authorization=bce-auth-v1%2FALTAKvz6x4eqcmSsKjQxq3vZdB%2F2026-01-06T12%3A12%3A24Z%2F2592000%2Fhost%2Fa5344c32358a010bb15e42e93d8e536a1e25024ee1f8263fed815418fffdef7f
+          
+
+      # --- 第四阶段：运行测试 ---
+      
+      - name: Run Unit Test
+        run: |
+          # 再次确认一下 XPU 是否可见
+          xpu-smi || echo "Warning: xpu-smi failed"
+          
+          # 运行测试
+          pytest -v -s tests/ut
