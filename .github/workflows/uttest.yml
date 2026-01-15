@@ -23,7 +23,7 @@ jobs:
           
           # 【新增】解决 Git 代理问题 (防止拉代码失败)
           git config --global http.proxy http://10.63.229.53:8891
-          git config --global https.proxy http://10.63.229.53:8891
+          git config --global https.proxy https://10.63.229.53:8891
           git config --global http.sslVerify false
 
       # --- 第二步：拉取 vLLM-Kunlun 代码 ---
