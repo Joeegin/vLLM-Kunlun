@@ -32,14 +32,6 @@ jobs:
             exit 1
           fi
 
-      - name: Verify Environment & Proxy
-        run: |
-          echo "Current Python: $(which python)"
-          echo "Proxy Check: $http_proxy"
-          python --version
-          # 测试一下网络通不通 (可选)
-          curl -I https://pypi.org
-
       # --- 第二阶段：安装 vLLM 主库 (Upstream) ---
       
       - name: Checkout upstream vllm
