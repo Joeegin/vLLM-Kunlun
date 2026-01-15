@@ -46,41 +46,6 @@ jobs:
           which pip
           # 输出必须是: .../bin/pip
 
-      # --- 第三步：安装 vLLM 主库 ---
-      - name: Checkout upstream vllm
-        uses: actions/checkout@v4
-        with:
-          repository: vllm-project/vllm
-          ref: v0.11.0
-          path: ./vllm-upstream
-
-      - name: Install vllm upstream
-        working-directory: ./vllm-upstream
-        run: |
-          # 【重要技巧】
-          # 即使激活了环境，建议永远使用 'python -m pip' 而不是直接 'pip'
-          # 这能确保 100% 使用当前 python 对应的 pip，避免系统缓存干扰
-          
-          echo "Pre-installing build tools..."
-          python -m pip install cmake ninja packaging setuptools wheel --default-timeout=100
-
-          echo "Installing vllm..."
-          # --no-build-isolation: 关键参数！防止 pip 偷偷用系统 python 去建虚拟环境导致报错
-          # --no-deps: 既然你环境里 torch 都是好的，别让它乱升级/降级
-          python -m pip install . --no-build-isolation --no-deps --default-timeout=100
-
-      # --- 第四步：安装 vLLM-Kunlun ---
-      - name: Checkout vllm-kunlun code
-        uses: actions/checkout@v4
-
-      - name: Install vllm-kunlun
-        run: |
-          # 后续步骤都不需要再配置路径了，直接用
-          python -m pip install -v -e . --no-build-isolation --default-timeout=100
-          
-          # 您的其他安装命令...
-          # wget ...
-          # bash ...
       - name: Install pytest
         run: 
           python -m pip install pytest 
