@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   test-kunlun:
-    runs-on: [self-hosted, linux] # 必须跑在你的 Linux 实体机 Runner 上
+    runs-on: [self-hosted, test-0] # 必须跑在你的 Linux 实体机 Runner 上
     
     container:
       # 1. 对应 export build_image="..."
