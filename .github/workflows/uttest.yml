@@ -49,6 +49,21 @@ jobs:
       - name: Install pytest
         run: 
           python -m pip install pytest 
+      # --- 第五阶段：运行测试 ---
+      
+      - name: Debug Directory Structure
+        run: |
+          echo "Current working directory:"
+          pwd
+          
+          echo "Listing root files:"
+          ls -F
+          
+          echo "Listing tests directory (if exists):"
+          ls -F tests/ || echo "tests folder not found!"
+          
+          echo "Searching for test files:"
+          find . -maxdepth 4 -name "test_*.py" | head -n 5
       # --- 第五步：运行测试 ---
       - name: Run Unit Test
         run: |
