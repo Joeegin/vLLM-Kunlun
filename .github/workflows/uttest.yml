@@ -17,56 +17,70 @@ jobs:
     
 
     steps:
-      # --- 第一步：全局激活环境 (最关键的一步) ---
-      - name: Activate Conda Environment Globally
+      # --- 第一步：全局环境设置 ---
+      - name: Configure Environment
         run: |
-          # 1. 定义你的环境 bin 目录 (根据您提供的信息)
-          # 注意：Conda 环境的可执行文件都在 /bin 目录下，必须精确指向这里
+          # 1. 设置 Python 路径
           CONDA_BIN="/root/miniconda/envs/python310_torch25_cuda/bin"
-          
-          # 2. 【核心魔法】将这个路径写入 GITHUB_PATH
-          # 这样后续所有 Step 里的 'python' 和 'pip' 命令都会默认用这个目录下的
           echo "$CONDA_BIN" >> $GITHUB_PATH
           
-          # 3. (可选) 设置 CONDA_PREFIX 变量，有些编译脚本依赖这个
-          echo "CONDA_PREFIX=/root/miniconda/envs/python310_torch25_cuda" >> $GITHUB_ENV
+          # 2. 打印一下确认
+          echo "Environment configured. Next, checking out code..."
 
-      # --- 第二步：验证激活是否成功 ---
-      - name: Verify Activation
-        run: |
-          echo "Which python am I using?"
-          which python
-          # 输出必须是: /root/miniconda/envs/python310_torch25_cuda/bin/python
-          
-          echo "Python Version:"
-          python --version
-          # 输出必须是: Python 3.10.x
-
-          echo "Check PIP location:"
-          which pip
-          # 输出必须是: .../bin/pip
-
-      - name: Install pytest
-        run: 
-          python -m pip install pytest 
-      # --- 第五阶段：运行测试 ---
+      # --- 第二步：并行拉取代码 (关键修改) ---
       
-      - name: Debug Directory Structure
+      # 1. 拉取上游代码 -> 放入 vllm-upstream 文件夹
+      - name: Checkout upstream vllm
+        uses: actions/checkout@v4
+        with:
+          repository: vllm-project/vllm
+          ref: v0.11.0
+          path: ./vllm-upstream
+
+      # 2. 拉取您的代码 -> 放入 vllm-kunlun 文件夹 (不再放在根目录)
+      - name: Checkout vllm-kunlun code
+        uses: actions/checkout@v4
+        with:
+          path: ./vllm-kunlun  # 【强制指定目录，防止丢失】
+
+      # --- 第三步：安装依赖 ---
+      
+      - name: Install Build Tools
         run: |
-          echo "Current working directory:"
-          pwd
+          python -m pip install cmake ninja packaging setuptools wheel pytest pytest-cov --default-timeout=100
+
+      - name: Install vllm upstream
+        working-directory: ./vllm-upstream  # 进入上游目录
+        run: |
+          # 安装上游库
+          python -m pip install . --no-build-isolation --no-deps --default-timeout=100
+
+      - name: Install vllm-kunlun
+        working-directory: ./vllm-kunlun   # 【关键】进入您的代码目录
+        run: |
+          echo "Installing my project..."
+          python -m pip install -v -e . --no-build-isolation --default-timeout=100
+
+          # 下载并安装昆仑相关包 (保持您原来的逻辑)
+          # 注意：这里的 wget 会下载到 ./vllm-kunlun 目录下，没问题
+          # wget -O xpytorch-cp310-torch251-ubuntu2004-x64.run https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xpytorch-cp310-torch251-ubuntu2004-x64.run?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-02T05%3A01%3A27Z%2F-1%2Fhost%2Ff3cf499234f82303891aed2bcb0628918e379a21e841a3fac6bd94afef491ff7
+          # bash xpytorch-cp310-torch251-ubuntu2004-x64.run
           
-          echo "Listing root files:"
+          # ... (其他 pip install 命令保持不变)
+
+      # --- 第四步：运行测试 ---
+      
+      - name: Debug & Run Test
+        working-directory: ./vllm-kunlun  # 【关键】必须进入这个目录跑测试
+        run: |
+          echo "Checking files in vllm-kunlun:"
           ls -F
           
-          echo "Listing tests directory (if exists):"
-          ls -F tests/ || echo "tests folder not found!"
+          echo "Checking tests folder:"
+          ls -F tests/ || echo "tests folder still missing!"
           
-          echo "Searching for test files:"
-          find . -maxdepth 4 -name "test_*.py" | head -n 5
-      # --- 第五步：运行测试 ---
-      - name: Run Unit Test
-        run: |
+          echo "Running Pytest..."
           xpu-smi || echo "Warning: xpu-smi failed"
-          # 这里的 pytest 也会自动用 conda 环境里的
-          pytest -v -s tests/ut
+          
+          # 现在路径肯定是正确的了
+          pytest -v -s --cov tests/ut
