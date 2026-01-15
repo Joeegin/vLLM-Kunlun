@@ -8,7 +8,7 @@ jobs:
 
     env:
       http_proxy: http://10.63.229.53:8891
-      https_proxy: http://10.63.229.53:8891
+      https_proxy: https://10.63.229.53:8891
       no_proxy: localhost,127.0.0.1,0.0.0.0,.baidu.com,.baidu-int.com
       # 保持这个变量，以防万一
       VLLM_TARGET_DEVICE: empty 
@@ -20,11 +20,7 @@ jobs:
           CONDA_BIN="/root/miniconda/envs/python310_torch25_cuda/bin"
           echo "$CONDA_BIN" >> $GITHUB_PATH
           echo "PY=$CONDA_BIN/python" >> $GITHUB_ENV
-          
-          # 【新增】解决 Git 代理问题 (防止拉代码失败)
-          git config --global http.proxy http://10.63.229.53:8891
-          git config --global https.proxy https://10.63.229.53:8891
-          git config --global http.sslVerify false
+
 
       # --- 第二步：拉取 vLLM-Kunlun 代码 ---
       - name: Checkout Code
