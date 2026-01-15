@@ -5,11 +5,8 @@ on: [push]
 jobs:
   test-my-server:
     # 关键修改：不再用 ubuntu-latest，而是用你自己的 Runner
-    runs-on: [self-hosted, ut]
+    runs-on: test-0
     
     steps:
-      - name: Check user
-        run: whoami  # 这会显示你服务器上的用户名 (v_qiaoyijin)
-        
       - name: Check connection
         run: echo "This is running on my own linux machine!"
