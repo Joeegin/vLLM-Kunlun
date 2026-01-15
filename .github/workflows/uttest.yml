@@ -41,23 +41,26 @@ jobs:
           # -e .: 挂载当前代码
           $PY -m pip install -e . --no-deps --no-build-isolation
 
-      # --- 第四步：运行测试 ---
+      # --- 第四步：运行测试 (修复版) ---
       - name: Run Unit Test
         run: |
-          xpu-smi || echo "Warning: xpu-smi not found"
-
-          # 【核心修复】自动设置库路径，解决 'libxpu_blas.so' 和 '符号丢失' 问题
-          TORCH_LIB_PATH=$($PY -c "import os, torch; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))")
+          # 1. 动态找到当前环境里 PyTorch 的库路径 (/root/.../lib/python3.10/site-packages/torch/lib)
+          # 使用 $PY 变量或者直接用环境里的 python
+          TORCH_LIB_PATH=$(python -c "import os, torch; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))")
           
-          # 1. 设置 LD_LIBRARY_PATH
+          echo "Found Torch Lib Path: $TORCH_LIB_PATH"
+
+          # 2. 【核心修复 A】解决 libxpu_blas.so 找不到的问题
+          # 把 torch/lib 加入到系统查找路径里
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TORCH_LIB_PATH:/usr/local/lib
           
-          # 2. 设置 LD_PRELOAD (强制加载 CPU 版 Torch 核心库，解决符号缺失)
+          # 3. 【核心修复 B】解决 undefined symbol: _ZN3c10... 的问题
+          # 强制系统在加载任何插件前，先把 PyTorch 核心库 (libtorch_cpu.so) 加载进去
+          # 这样 torch_xmlir 就能找到它需要的符号了
           export LD_PRELOAD=$TORCH_LIB_PATH/libtorch_cpu.so
           
-          echo "Debug Environment:"
-          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-          echo "LD_PRELOAD: $LD_PRELOAD"
+          echo "Debug: LD_PRELOAD is set to $LD_PRELOAD"
 
-          # 运行测试
+          # 4. 运行测试
+          # -p no:warnings 是为了不让那些 "driver too old" 的警告刷屏
           pytest -v -s --cov tests/ut -p no:warnings
