@@ -11,7 +11,7 @@ jobs:
   test-on-kunlun:
     # ⚠️ 关键：这里必须对应你 Runner 实际拥有的标签
     # 根据之前的配置，你的 Runner 标签是 'ut'
-    runs-on: [self-hosted, ut]
+    runs-on: [self-hosted, test-0]
     
     steps:
       # 第一步：拉取代码
