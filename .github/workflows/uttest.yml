@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 jobs:
   test-kunlun:
+  
     runs-on: [self-hosted, test-0]
       # 2. 【关键】全局环境变量
       # 放在这里，整个 Job 的所有步骤（包括 checkout 和 pip）都会自动生效
