@@ -38,7 +38,7 @@ jobs:
           echo "Using Python interpreter: $PYTHON_BIN"
           
           # 1. 升级 pip (可选，但推荐)
-          $PYTHON_BIN -m pip install --upgrade pip
+          #$PYTHON_BIN -m pip install --upgrade pip
           
           # 2. 安装测试工具
           $PYTHON_BIN -m pip install pytest pytest-cov
