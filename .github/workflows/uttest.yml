@@ -10,7 +10,7 @@ jobs:
       http_proxy: http://10.63.229.53:8891
       https_proxy: http://10.63.229.53:8891
       no_proxy: localhost,127.0.0.1,0.0.0.0,.baidu.com,.baidu-int.com
-      # 强制告诉 vLLM 这是一个纯 CPU/XPU 构建，别去找 CUDA
+      # 保持这个变量，以防万一
       VLLM_TARGET_DEVICE: empty 
 
     steps:
@@ -19,51 +19,49 @@ jobs:
         run: |
           CONDA_BIN="/root/miniconda/envs/python310_torch25_cuda/bin"
           echo "$CONDA_BIN" >> $GITHUB_PATH
-          
-          # 【新增】定义一个 Python 变量，后面反复用
           echo "PY=$CONDA_BIN/python" >> $GITHUB_ENV
-
-      # --- 第二步：清理与重装 (关键修复步骤) ---
-      - name: Fix Dependencies
-        run: |
-          echo "1. Uninstalling conflicting packages..."
-          # 卸载容器自带的 CUDA 版 vLLM，防止 'cuTensorMapEncodeTiled' 报错
-          # 卸载 transformer_engine 防止报错
-          $PY -m pip uninstall -y vllm transformer_engine || true
           
-          echo "2. Installing Build Dependencies..."
-          # 补齐构建工具
-          $PY -m pip install cmake ninja packaging setuptools wheel setuptools-scm numpy hatchling editables pytest pytest-cov --default-timeout=100
+          # 【新增】解决 Git 代理问题 (防止拉代码失败)
+          git config --global http.proxy http://10.63.229.53:8891
+          git config --global https.proxy http://10.63.229.53:8891
+          git config --global http.sslVerify false
 
-      # --- 第三步：拉取代码 ---
-      # 只需要拉取 vLLM-Kunlun，不需要 upstream
-      # (vLLM 基础库我们会通过 pip 自动装一个兼容版)
+      # --- 第二步：拉取 vLLM-Kunlun 代码 ---
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          # 加上 fetch-depth: 0 避免浅克隆带来的 git 报错
+          fetch-depth: 0
 
-      # --- 第四步：安装当前项目 ---
+      # --- 第三步：安装当前项目 (vLLM-Kunlun) ---
       - name: Install Project
         run: |
-          echo "Installing vLLM-Kunlun in editable mode..."
-          # 这会自动安装 vllm-kunlun 及其依赖（包括 vllm）
-          # 关键：因为有了 VLLM_TARGET_DEVICE=empty 环境变量，新装的 vllm 不会含 CUDA 代码
-          $PY -m pip install -e . --no-build-isolation
+          echo "Installing vLLM-Kunlun..."
+          # 1. 补齐 hatchling 等构建工具 (以防万一环境里没装)
+          $PY -m pip install hatchling editables pytest pytest-cov
+          
+          # 2. 安装本项目
+          # --no-deps: 关键！千万别让它去 PyPI 重新下载 vllm，直接用我们预装好的
+          # -e .: 挂载当前代码
+          $PY -m pip install -e . --no-deps --no-build-isolation
 
-      # --- 第五步：运行测试 (带环境修复) ---
+      # --- 第四步：运行测试 ---
       - name: Run Unit Test
         run: |
-          # 【核心修复 1】自动查找 PyTorch 库路径并设置 LD_LIBRARY_PATH
-          # 这能解决 'libxpu_blas.so not found'
+          xpu-smi || echo "Warning: xpu-smi not found"
+
+          # 【核心修复】自动设置库路径，解决 'libxpu_blas.so' 和 '符号丢失' 问题
           TORCH_LIB_PATH=$($PY -c "import os, torch; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))")
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TORCH_LIB_PATH:/usr/local/lib:/usr/lib64
           
-          # 【核心修复 2】设置 LD_PRELOAD 解决 '_ZN3c10...' 符号丢失问题
-          # 强制预先加载 libtorch_cpu.so，确保所有 C++ 符号都可见
+          # 1. 设置 LD_LIBRARY_PATH
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TORCH_LIB_PATH:/usr/local/lib
+          
+          # 2. 设置 LD_PRELOAD (强制加载 CPU 版 Torch 核心库，解决符号缺失)
           export LD_PRELOAD=$TORCH_LIB_PATH/libtorch_cpu.so
           
-          echo "Debug: LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-          echo "Debug: LD_PRELOAD=$LD_PRELOAD"
+          echo "Debug Environment:"
+          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+          echo "LD_PRELOAD: $LD_PRELOAD"
 
           # 运行测试
-          # 加上 -p no:warnings 减少那一堆干扰视线的 Warning
           pytest -v -s --cov tests/ut -p no:warnings
