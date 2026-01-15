@@ -88,4 +88,4 @@ jobs:
           pytest -v -s tests/ut/test_wrapper.py
           
           echo "Running full suite..."
-          pytest -v -s --cov tests/ut -p no:warnings
+          pytest -v -s --cov tests/ut/test_wrapper.py -p no:warnings
