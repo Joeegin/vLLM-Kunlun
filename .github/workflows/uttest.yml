@@ -4,55 +4,66 @@ on: [push, pull_request]
 
 jobs:
   test-kunlun:
-    # 既然是 Root 运行 Runner，直接跑在宿主机 (容器内) 即可
     runs-on: [self-hosted, test-0]
 
     env:
       http_proxy: http://10.63.229.53:8891
       https_proxy: http://10.63.229.53:8891
       no_proxy: localhost,127.0.0.1,0.0.0.0,.baidu.com,.baidu-int.com
-      # 即使环境装好了，这个变量最好留着，防止某些内部逻辑会有偏差
+      # 强制告诉 vLLM 这是一个纯 CPU/XPU 构建，别去找 CUDA
       VLLM_TARGET_DEVICE: empty 
 
     steps:
-      # --- 第一步：环境“指路” ---
-      # 只要把 PATH 指过去，后面的 python/pip/pytest 就全是那个环境里的了
+      # --- 第一步：环境配置 ---
       - name: Configure Environment
         run: |
           CONDA_BIN="/root/miniconda/envs/python310_torch25_cuda/bin"
-          
-          # 1. 强制将 Conda bin 目录加到系统 PATH 最前面
           echo "$CONDA_BIN" >> $GITHUB_PATH
           
-          # 2. 验证一下环境对不对 (调试用)
-          echo "Environment Ready. Will use python from:"
-          echo "$CONDA_BIN"
+          # 【新增】定义一个 Python 变量，后面反复用
+          echo "PY=$CONDA_BIN/python" >> $GITHUB_ENV
 
-      # --- 第二步：拉取当前代码 ---
-      # 只需要拉取 vLLM-Kunlun，不需要 upstream，因为镜像里肯定装了 vllm
+      # --- 第二步：清理与重装 (关键修复步骤) ---
+      - name: Fix Dependencies
+        run: |
+          echo "1. Uninstalling conflicting packages..."
+          # 卸载容器自带的 CUDA 版 vLLM，防止 'cuTensorMapEncodeTiled' 报错
+          # 卸载 transformer_engine 防止报错
+          $PY -m pip uninstall -y vllm transformer_engine || true
+          
+          echo "2. Installing Build Dependencies..."
+          # 补齐构建工具
+          $PY -m pip install cmake ninja packaging setuptools wheel setuptools-scm numpy hatchling editables pytest pytest-cov --default-timeout=100
+
+      # --- 第三步：拉取代码 ---
+      # 只需要拉取 vLLM-Kunlun，不需要 upstream
+      # (vLLM 基础库我们会通过 pip 自动装一个兼容版)
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- 第三步：链接代码 (核心) ---
-      # 这一步不是为了下载包，而是为了让环境用到您“刚写的代码”，而不是“镜像里老的代码”
-      - name: Link Current Code
+      # --- 第四步：安装当前项目 ---
+      - name: Install Project
         run: |
-          echo "Linking current source code to environment..."
-          
-          # -e . : Editable 模式，直接把当前文件夹挂载到 Python 库里
-          # --no-deps : 关键！告诉 pip "别检查依赖，我环境里全都有，别给我联网下载"
-          # --no-build-isolation : 关键！直接用环境里的工具，别创建虚拟环境
-          python -m pip install -e . --no-deps --no-build-isolation
+          echo "Installing vLLM-Kunlun in editable mode..."
+          # 这会自动安装 vllm-kunlun 及其依赖（包括 vllm）
+          # 关键：因为有了 VLLM_TARGET_DEVICE=empty 环境变量，新装的 vllm 不会含 CUDA 代码
+          $PY -m pip install -e . --no-build-isolation
 
-      # --- 第四步：运行测试 ---
+      # --- 第五步：运行测试 (带环境修复) ---
       - name: Run Unit Test
         run: |
-          # 1. 确认驱动状态
-          xpu-smi || echo "Warning: xpu-smi command not found"
+          # 【核心修复 1】自动查找 PyTorch 库路径并设置 LD_LIBRARY_PATH
+          # 这能解决 'libxpu_blas.so not found'
+          TORCH_LIB_PATH=$($PY -c "import os, torch; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))")
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TORCH_LIB_PATH:/usr/local/lib:/usr/lib64
           
-          # 2. 确认 pytest 也是用的环境里的
-          which pytest
+          # 【核心修复 2】设置 LD_PRELOAD 解决 '_ZN3c10...' 符号丢失问题
+          # 强制预先加载 libtorch_cpu.so，确保所有 C++ 符号都可见
+          export LD_PRELOAD=$TORCH_LIB_PATH/libtorch_cpu.so
           
-          # 3. 跑测试
-          # 此时 pytest 会测试您刚才 checkout 下来的代码
-          pytest -v -s --cov tests/ut
+          echo "Debug: LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+          echo "Debug: LD_PRELOAD=$LD_PRELOAD"
+
+          # 运行测试
+          # 加上 -p no:warnings 减少那一堆干扰视线的 Warning
+          pytest -v -s --cov tests/ut -p no:warnings
