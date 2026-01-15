@@ -1,12 +1,60 @@
-name: Test My Runner
+name: Run Unit Tests (Python 3.10)
 
-on: [push]
+# 触发机制：推送到 main 或提交 PR 时触发
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  test-my-server:
-    # 关键修改：不再用 ubuntu-latest，而是用你自己的 Runner
-    runs-on: test-0
+  test-on-kunlun:
+    # ⚠️ 关键：这里必须对应你 Runner 实际拥有的标签
+    # 根据之前的配置，你的 Runner 标签是 'ut'
+    runs-on: [self-hosted, ut]
     
     steps:
-      - name: Check connection
-        run: echo "This is running on my own linux machine!"
+      # 第一步：拉取代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 第二步：环境检查 (调试用)
+      - name: Check Environment Info
+        run: |
+          echo "Current User: $(whoami)"
+          echo "Workspace: $GITHUB_WORKSPACE"
+          # 检查一下那个路径是否存在，防止路径写错
+          ls -lh /root/miniconda/envs/python310_torch25_cuda/bin/python || echo "Warning: Python path might be wrong!"
+
+      # 第三步：安装依赖 & 运行测试
+      # 我们把安装和运行合并，确保用的是同一个 Python
+      - name: Install & Run Pytest
+        run: |
+          # -------------------------------------------------------
+          # 配置区域：指定容器内 Python 3.10 环境的绝对路径
+          # -------------------------------------------------------
+          PYTHON_BIN=/root/miniconda/envs/python310_torch25_cuda/bin/python
+          
+          echo "Using Python interpreter: $PYTHON_BIN"
+          
+          # 1. 升级 pip (可选，但推荐)
+          $PYTHON_BIN -m pip install --upgrade pip
+          
+          # 2. 安装测试工具
+          $PYTHON_BIN -m pip install pytest pytest-cov
+          
+          # 3. 安装项目依赖
+          # 如果你有 requirements.txt，取消下面这行的注释
+          $PYTHON_BIN -m pip install -r requirements.txt
+          
+          # 4. 以编辑模式安装当前项目 (关键！让测试代码能 import vllm)
+          $PYTHON_BIN -m pip install -e .
+          
+          # -------------------------------------------------------
+          # 执行区域：正式运行测试
+          # -------------------------------------------------------
+          echo "Starting Pytest..."
+          # -v: 详细模式
+          # -s: 显示打印输出 (print语句)
+          # tests/ut: 指定测试目录
+          $PYTHON_BIN -m pytest -v -s tests/ut
