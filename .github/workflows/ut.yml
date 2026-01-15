@@ -1,6 +1,5 @@
 name: Run Unit Tests (Python 3.10)
 
-# 触发机制：推送到 main 或提交 PR 时触发
 on:
   push:
     branches: [ "main" ]
@@ -9,52 +8,40 @@ on:
 
 jobs:
   test-on-kunlun:
-    # ⚠️ 关键：这里必须对应你 Runner 实际拥有的标签
-    # 根据之前的配置，你的 Runner 标签是 'ut'
     runs-on: [self-hosted, test-0]
-    
+
     steps:
-      # 第一步：拉取代码
+      # 1. 拉代码
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 第二步：环境检查 (调试用)
-      - name: Check Environment Info
+      # 2. Python 环境确认
+      - name: Check Python
         run: |
-          echo "Current User: $(whoami)"
-          echo "Workspace: $GITHUB_WORKSPACE"
-          # 检查一下那个路径是否存在，防止路径写错
-          ls -lh /root/miniconda/envs/python310_torch25_cuda/bin/python || echo "Warning: Python path might be wrong!"
+          echo "User: $(whoami)"
+          which python3 || true
+          python3 --version
+          python3 -m site --user-site
 
-      # 第三步：安装依赖 & 运行测试
-      # 我们把安装和运行合并，确保用的是同一个 Python
-      - name: Install & Run Pytest
+      # 3. 安装依赖 + 跑 UT（不使用虚拟环境）
+      - name: Install deps & run UT
         run: |
-          # -------------------------------------------------------
-          # 配置区域：指定容器内 Python 3.10 环境的绝对路径
-          # -------------------------------------------------------
-          PYTHON_BIN=/root/miniconda/envs/python310_torch25_cuda/bin/python
-          
-          echo "Using Python interpreter: $PYTHON_BIN"
-          
-          # 1. 升级 pip (可选，但推荐)
-          # $PYTHON_BIN -m pip install --upgrade pip
-          
-          # 2. 安装测试工具
-          # $PYTHON_BIN -m pip install pytest pytest-cov
-          
-          # 3. 安装项目依赖
-          # 如果你有 requirements.txt，取消下面这行的注释
-          $PYTHON_BIN -m pip install -r requirements.txt
-          
-          # 4. 以编辑模式安装当前项目 (关键！让测试代码能 import vllm)
-          $PYTHON_BIN -m pip install -e .
-          
-          # -------------------------------------------------------
-          # 执行区域：正式运行测试
-          # -------------------------------------------------------
-          echo "Starting Pytest..."
-          # -v: 详细模式
-          # -s: 显示打印输出 (print语句)
-          # tests/ut: 指定测试目录
-          $PYTHON_BIN -m pytest -v -s tests/ut
+          # 确保用户级 pip 路径生效
+          export PATH="$HOME/.local/bin:$PATH"
+
+          # 升级 pip（用户级）
+          python3 -m pip install --user -U pip setuptools wheel
+
+          # pytest
+          python3 -m pip install --user pytest
+
+          # 项目依赖
+          if [ -f requirements.txt ]; then
+            python3 -m pip install --user -r requirements.txt
+          fi
+
+          # 安装当前项目（用户级 editable）
+          python3 -m pip install --user -e .
+
+          echo "===== Running UT ====="
+          pytest -v tests/ut
