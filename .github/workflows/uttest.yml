@@ -17,70 +17,82 @@ jobs:
     
 
     steps:
-      # --- 第一步：全局环境设置 ---
+      # --- 第一步：环境配置 ---
       - name: Configure Environment
         run: |
-          # 1. 设置 Python 路径
+          # 设置 Conda 路径
           CONDA_BIN="/root/miniconda/envs/python310_torch25_cuda/bin"
           echo "$CONDA_BIN" >> $GITHUB_PATH
           
-          # 2. 打印一下确认
-          echo "Environment configured. Next, checking out code..."
+          # 设置 vLLM 编译目标为 empty (防止去检测 NVIDIA 驱动)
+          echo "VLLM_TARGET_DEVICE=empty" >> $GITHUB_ENV
+          
+          # 设置 setuptools_scm 环境变量 (防止获取版本失败)
+          echo "SETUPTOOLS_SCM_PRETEND_VERSION=0.11.0" >> $GITHUB_ENV
 
-      # --- 第二步：并行拉取代码 (关键修改) ---
+      # --- 第二步：拉取代码 (双目录结构) ---
       
-      # 1. 拉取上游代码 -> 放入 vllm-upstream 文件夹
+      # 1. 拉取 vLLM v0.11.0
       - name: Checkout upstream vllm
         uses: actions/checkout@v4
         with:
           repository: vllm-project/vllm
-          ref: v0.11.0
+          ref: v0.11.0           # 【已锁定 v0.11.0】
           path: ./vllm-upstream
 
-      # 2. 拉取您的代码 -> 放入 vllm-kunlun 文件夹 (不再放在根目录)
+      # 2. 拉取您的代码
       - name: Checkout vllm-kunlun code
         uses: actions/checkout@v4
         with:
-          path: ./vllm-kunlun  # 【强制指定目录，防止丢失】
+          path: ./vllm-kunlun    # 必须分开存放，防止冲突
 
-      # --- 第三步：安装依赖 ---
+      # --- 第三步：安装依赖 & 构建 vLLM 0.11.0 ---
       
       - name: Install Build Tools
         run: |
-          python -m pip install cmake ninja packaging setuptools wheel pytest pytest-cov --default-timeout=100
+          echo "Installing build dependencies..."
+          # 【核心修复】补全构建依赖
+          # setuptools-scm: 必须装，否则无法解析 v0.11.0 的版本号
+          # numpy: 编译 C++ 扩展需要
+          python -m pip install cmake ninja packaging setuptools wheel setuptools-scm numpy pytest pytest-cov --default-timeout=100
 
-      - name: Install vllm upstream
-        working-directory: ./vllm-upstream  # 进入上游目录
+      - name: Install vllm upstream (v0.11.0)
+        working-directory: ./vllm-upstream
         run: |
-          # 安装上游库
+          echo "Building vLLM v0.11.0..."
+          
+          # 1. 确保 VLLM_TARGET_DEVICE 生效
+          export VLLM_TARGET_DEVICE=empty
+          
+          # 2. 安装
+          # --no-build-isolation: 使用我们刚装好的环境
+          # --no-deps: 防止破坏 PyTorch 环境
           python -m pip install . --no-build-isolation --no-deps --default-timeout=100
+          
+          # 3. 验证版本 (安装完马上查，有问题这就报错了)
+          python -c "import vllm; print(f'Successfully installed vLLM version: {vllm.__version__}')"
 
+      # --- 第四步：安装 vLLM-Kunlun & 运行测试 ---
+      
       - name: Install vllm-kunlun
-        working-directory: ./vllm-kunlun   # 【关键】进入您的代码目录
+        working-directory: ./vllm-kunlun
         run: |
-          echo "Installing my project..."
           python -m pip install -v -e . --no-build-isolation --default-timeout=100
-
-          # 下载并安装昆仑相关包 (保持您原来的逻辑)
-          # 注意：这里的 wget 会下载到 ./vllm-kunlun 目录下，没问题
+          
+          # 下载安装昆仑相关包
           # wget -O xpytorch-cp310-torch251-ubuntu2004-x64.run https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xpytorch-cp310-torch251-ubuntu2004-x64.run?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-02T05%3A01%3A27Z%2F-1%2Fhost%2Ff3cf499234f82303891aed2bcb0628918e379a21e841a3fac6bd94afef491ff7
           # bash xpytorch-cp310-torch251-ubuntu2004-x64.run
           
-          # ... (其他 pip install 命令保持不变)
+          # 安装其他 whl 包...
+          # pip install "https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xtorch_ops-0.1.2209%2B6752ad20-cp310-cp310-linux_x86_64.whl?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-05T06%3A18%3A00Z%2F-1%2Fhost%2F14936c2b7e7c557c1400e4c467c79f7a9217374a7aa4a046711ac4d948f460cd"
+          # pip install "https://cce-ai-models.bj.bcebos.com/v1/vllm-kunlun-0.11.0/triton-3.0.0%2Bb2cde523-cp310-cp310-linux_x86_64.whl"
+          # pip install "https://cce-ai-models.bj.bcebos.com/XSpeedGate-whl/release_merge/20251219_152418/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl"
+          # wget -O xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl https://aihc-private-hcd.bj.bcebos.com/xspeedgate_release/deepseek_v3_2/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64_2601062006.whl?authorization=bce-auth-v1%2FALTAKvz6x4eqcmSsKjQxq3vZdB%2F2026-01-06T12%3A12%3A24Z%2F2592000%2Fhost%2Fa5344c32358a010bb15e42e93d8e536a1e25024ee1f8263fed815418fffdef7f
+          # pip install xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl
 
-      # --- 第四步：运行测试 ---
-      
-      - name: Debug & Run Test
-        working-directory: ./vllm-kunlun  # 【关键】必须进入这个目录跑测试
+      - name: Run Unit Test
+        working-directory: ./vllm-kunlun
         run: |
-          echo "Checking files in vllm-kunlun:"
-          ls -F
-          
-          echo "Checking tests folder:"
-          ls -F tests/ || echo "tests folder still missing!"
-          
-          echo "Running Pytest..."
           xpu-smi || echo "Warning: xpu-smi failed"
-          
-          # 现在路径肯定是正确的了
+          # 运行测试
           pytest -v -s --cov tests/ut
