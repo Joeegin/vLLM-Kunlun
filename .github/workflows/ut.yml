@@ -1,47 +1,57 @@
-name: Run Unit Tests (Python 3.10)
+name: Kunlun Unit Test
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push, pull_request]
 
 jobs:
-  test-on-kunlun:
-    runs-on: [self-hosted, test-0]
+  test-kunlun:
+    runs-on: [self-hosted, linux] # 必须跑在你的 Linux 实体机 Runner 上
+    
+    container:
+      # 1. 对应 export build_image="..."
+      image: iregistry.baidu-int.com/xmlir/xmlir_ubuntu_2004_x86_64:v0.32
+      
+      # 2. 对应 -v 挂载
+      # 注意：GitHub Actions 会自动挂载当前代码到工作目录，所以不需要手动挂载 workspace
+      volumes:
+        - /home:/home
+        - /ssd1:/ssd1
+        - /ssd2:/ssd2
+        - /ssd3:/ssd3
+        - /usr/local/bin/xpu-smi:/usr/local/bin/xpu-smi
+      
+      # 3. 对应 docker run 的各种参数
+      # YAML 里不支持 for 循环，所以设备列表必须显式写出来（或者用 --privileged 直接全放开）
+      options: >-
+        --net=host
+        --cap-add=SYS_PTRACE
+        --security-opt seccomp=unconfined
+        --shm-size=32g
+        --device=/dev/xpuctrl:/dev/xpuctrl
+        --device=/dev/xpu0:/dev/xpu0
+        --device=/dev/xpu1:/dev/xpu1
+        --device=/dev/xpu2:/dev/xpu2
+        --device=/dev/xpu3:/dev/xpu3
+        --device=/dev/xpu4:/dev/xpu4
+        --device=/dev/xpu5:/dev/xpu5
+        --device=/dev/xpu6:/dev/xpu6
+        --device=/dev/xpu7:/dev/xpu7
 
     steps:
-      # 1. 拉代码
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Python 环境确认
-      - name: Check Python
+      # 【关键步骤】切换环境
+      - name: Switch Conda Env
         run: |
-          echo "User: $(whoami)"
-          which python3 || true
-          python3 --version
-          python3 -m site --user-site
-
-      # 3. 安装依赖 + 跑 UT（不使用虚拟环境）
-      - name: Install deps & run UT
+          # 1. 找到该环境的 bin 目录 (假设安装在 /opt/conda 或 /root/miniconda3 下)
+          # 如果你不确定路径，先用 `conda info --envs` 查一下
+          ENV_PATH="/root/miniconda/envs/python310_torch25_cuda"
+          
+          # 2. 将其添加到 GITHUB_PATH 环境变量中
+          echo "$ENV_PATH" >> $GITHUB_PATH
+          
+      # 【后续步骤】不需要再 activate，直接用就是新环境
+      - name: Check Python Version
         run: |
-          # 确保用户级 pip 路径生效
-          export PATH="$HOME/.local/bin:$PATH"
-
-          # 升级 pip（用户级）
-          python3 -m pip install --user -U pip setuptools wheel
-
-          # pytest
-          python3 -m pip install --user pytest
-
-          # 项目依赖
-          if [ -f requirements.txt ]; then
-            python3 -m pip install --user -r requirements.txt
-          fi
-
-          # 安装当前项目（用户级 editable）
-          python3 -m pip install --user -e .
-
-          echo "===== Running UT ====="
-          pytest -v tests/ut
+          which python  # 应该显示 .../envs/python310_torch25_cuda/bin/python
+          python --version
