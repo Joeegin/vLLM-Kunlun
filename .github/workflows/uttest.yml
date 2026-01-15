@@ -72,19 +72,17 @@ jobs:
           python -m pip install -v -e . --no-build-isolation --default-timeout=100
 
           # 3. 安装昆仑特定包 (如果 requirements.txt 里没包含这些，请保留)
-          # wget -O xpytorch-cp310-torch251-ubuntu2004-x64.run https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xpytorch-cp310-torch251-ubuntu2004-x64.run?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-02T05%3A01%3A27Z%2F-1%2Fhost%2Ff3cf499234f82303891aed2bcb0628918e379a21e841a3fac6bd94afef491ff7
-          # bash xpytorch-cp310-torch251-ubuntu2004-x64.run
+          wget -O xpytorch-cp310-torch251-ubuntu2004-x64.run https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xpytorch-cp310-torch251-ubuntu2004-x64.run?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-02T05%3A01%3A27Z%2F-1%2Fhost%2Ff3cf499234f82303891aed2bcb0628918e379a21e841a3fac6bd94afef491ff7
+          bash xpytorch-cp310-torch251-ubuntu2004-x64.run
           
           # 如果 requirements.txt 里已经有了下面这些 whl 的地址，这几行可以删掉
-          # pip install "https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xtorch_ops-0.1.2209%2B6752ad20-cp310-cp310-linux_x86_64.whl?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-05T06%3A18%3A00Z%2F-1%2Fhost%2F14936c2b7e7c557c1400e4c467c79f7a9217374a7aa4a046711ac4d948f460cd"
-          # pip install "https://cce-ai-models.bj.bcebos.com/v1/vllm-kunlun-0.11.0/triton-3.0.0%2Bb2cde523-cp310-cp310-linux_x86_64.whl"
-          # pip install "https://cce-ai-models.bj.bcebos.com/XSpeedGate-whl/release_merge/20251219_152418/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl"
+          pip install "https://baidu-kunlun-public.su.bcebos.com/v1/baidu-kunlun-share/1130/xtorch_ops-0.1.2209%2B6752ad20-cp310-cp310-linux_x86_64.whl?authorization=bce-auth-v1%2FALTAKypXxBzU7gg4Mk4K4c6OYR%2F2025-12-05T06%3A18%3A00Z%2F-1%2Fhost%2F14936c2b7e7c557c1400e4c467c79f7a9217374a7aa4a046711ac4d948f460cd"
+          pip install "https://cce-ai-models.bj.bcebos.com/v1/vllm-kunlun-0.11.0/triton-3.0.0%2Bb2cde523-cp310-cp310-linux_x86_64.whl"
+          pip install "https://cce-ai-models.bj.bcebos.com/XSpeedGate-whl/release_merge/20251219_152418/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl"
           
-          # wget -O xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl https://aihc-private-hcd.bj.bcebos.com/xspeedgate_release/deepseek_v3_2/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64_2601062006.whl?authorization=bce-auth-v1%2FALTAKvz6x4eqcmSsKjQxq3vZdB%2F2026-01-06T12%3A12%3A24Z%2F2592000%2Fhost%2Fa5344c32358a010bb15e42e93d8e536a1e25024ee1f8263fed815418fffdef7f
-          # pip install xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl
-          
-          # 强行卸载 transformer_engine 防止 accelerate 瞎引用报错
-          python -m pip uninstall -y transformer_engine || true
+          wget -O xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl https://aihc-private-hcd.bj.bcebos.com/xspeedgate_release/deepseek_v3_2/xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64_2601062006.whl?authorization=bce-auth-v1%2FALTAKvz6x4eqcmSsKjQxq3vZdB%2F2026-01-06T12%3A12%3A24Z%2F2592000%2Fhost%2Fa5344c32358a010bb15e42e93d8e536a1e25024ee1f8263fed815418fffdef7f
+          pip install xspeedgate_ops-0.0.0-cp310-cp310-linux_x86_64.whl
+
 
       # --- 第六步：运行测试 ---
       - name: Run Unit Test
