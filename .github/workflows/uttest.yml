@@ -51,4 +51,4 @@ jobs:
 
 
           echo "Running full suite..."
-          pytest -v -s --cov tests/ut/models -p no:warnings
+          pytest -v -s --cov tests/ut -p no:warnings tests/ut/models
