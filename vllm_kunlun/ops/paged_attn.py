@@ -59,7 +59,7 @@ class PagedAttention:
         Returns:
             Tuple[int, ...]: KV缓存的形状，包括两个元素：第一个元素为2，表示维度数量为2；第二个元素为num_blocks、num_kv_heads、block_size和head_size中的任意一个。
         """
-        if current_platform.is_kunlun():
+        if getattr(current_platform, "is_kunlun", lambda: False)():
             return (2, num_blocks, num_kv_heads, block_size, head_size)
         return (2, num_blocks, block_size * num_kv_heads * head_size)
 
@@ -88,7 +88,7 @@ class PagedAttention:
         x = 16 // kv_cache.element_size()
         num_blocks = kv_cache.shape[1]
 
-        if current_platform.is_kunlun():
+        if getattr(current_platform, "is_kunlun", lambda: False)():
             key_cache = kv_cache[0]
             value_cache = kv_cache[1]
         else:
