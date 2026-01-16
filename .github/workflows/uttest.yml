@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   test-kunlun:
-    runs-on: [self-hosted, test-0]
+    runs-on: [self-hosted, test-1]
 
     env:
       http_proxy: http://10.63.229.53:8891
@@ -35,57 +35,10 @@ jobs:
           echo "Installing vLLM-Kunlun..."
           # 1. 补齐 hatchling 等构建工具 (以防万一环境里没装)
           $PY -m pip install hatchling editables pytest pytest-cov
-          
-          # 2. 安装本项目
-          # --no-deps: 关键！千万别让它去 PyPI 重新下载 vllm，直接用我们预装好的
-          # -e .: 挂载当前代码
-          $PY -m pip install -e . --no-deps --no-build-isolation
 
       # --- 第四步：运行测试 (终极修复版) ---
       - name: Run Unit Test
         run: |
-          xpu-smi || echo "Warning: xpu-smi not found"
-
-          echo "🔍 Starting Library Search & Fix..."
-
-          # 1. 找到 PyTorch 的核心库目录
-          # 直接问 Python 它是装在哪的
-          TORCH_LIB_PATH=$(python -c "import os, torch; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))")
-          echo "Found Torch Lib: $TORCH_LIB_PATH"
-
-          # 2. 【核心】全盘搜索缺失的 libxpu_blas.so
-          # find 命令会找到这个文件在哪，然后我们把它的目录加到环境变量里
-          XPU_BLAS_FILE=$(find / -name "libxpu_blas.so" 2>/dev/null | head -n 1)
-          
-          if [ -z "$XPU_BLAS_FILE" ]; then
-            echo "❌ Critical Error: libxpu_blas.so not found anywhere!"
-            # 找不到也没办法，只能硬着头皮跑
-          else
-            XPU_LIB_DIR=$(dirname "$XPU_BLAS_FILE")
-            echo "Found XPU Lib Dir: $XPU_LIB_DIR"
-            
-            # 把找到的目录加到 LD_LIBRARY_PATH
-            export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$XPU_LIB_DIR
-          fi
-
-          # 3. 组装最终的环境变量
-          # 将 Torch 库、XPU 库、系统库全部加入
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TORCH_LIB_PATH:/usr/local/lib:/usr/lib64
-          
-          # 4. 【绝杀】设置 LD_PRELOAD
-          # 强制预加载 libtorch_cpu.so 解决 _ZN3c10 符号缺失
-          export LD_PRELOAD=$TORCH_LIB_PATH/libtorch_cpu.so
-
-          echo "----------------------------------------"
-          echo "Final LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-          echo "Final LD_PRELOAD: $LD_PRELOAD"
-          echo "----------------------------------------"
-
           # 5. 运行测试
-          # 加上 -v -s 并且指定具体文件，或者跑整个目录
-          # 建议先跑一下您本地通过的那个 test_wrapper.py 验证 Runner 环境是否修好了
-          echo "Running verification test (test_wrapper.py)..."
-          pytest -v -s tests/ut/test_wrapper.py
-          
           echo "Running full suite..."
-          pytest -v -s --cov tests/ut/v1/test_kunlun_attn_v1.py -p no:warnings
+          pytest -v -s --cov tests/ut -p no:warnings
