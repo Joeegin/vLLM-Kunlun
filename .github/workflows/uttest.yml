@@ -11,7 +11,7 @@ jobs:
       https_proxy: https://10.63.229.53:8891
       no_proxy: localhost,127.0.0.1,0.0.0.0,.baidu.com,.baidu-int.com
       # 保持这个变量，以防万一
-      VLLM_TARGET_DEVICE: empty 
+      # VLLM_TARGET_DEVICE: empty 
 
     steps:
       # --- 第一步：环境配置 ---
@@ -46,7 +46,7 @@ jobs:
       # --- 第四步：运行测试 (终极修复版) ---
       - name: Run Unit Test
         run: |
-        
+
           # 5. 运行测试
           echo "Running full suite..."
           pytest -v -s --cov tests/ut -p no:warnings
