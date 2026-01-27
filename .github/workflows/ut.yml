@@ -52,4 +52,8 @@ jobs:
         run: |
           echo "Running full suite..."
           export XPU_VISIBLE_DEVICES=1
-          pytest -v -s --cov vllm_kunlun -p no:warnings tests/ut
+          pytest \
+          -vs \
+          --cov=vllm_kunlun \
+          --cov-report=term-missing \
+          -p no:warnings tests/ut
