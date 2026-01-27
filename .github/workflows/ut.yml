@@ -46,7 +46,7 @@ jobs:
         run: |
           export http_proxy=http://10.63.229.53:8891
           export https_proxy=http://10.63.229.53:8891
-          pip install pytest python-cov # python-cov need proxy
+          pip install pytest pytest-cov # pytest-cov need proxy
 
       - name: Run Unit Test
         run: |
