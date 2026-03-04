@@ -94,6 +94,10 @@ def register_model():
     )
 
     ModelRegistry.register_model(
+        "Qwen3_5ForConditionalGeneration",
+        "vllm_kunlun.models.qwen3_5:Qwen3_5ForConditionalGeneration")
+    
+    ModelRegistry.register_model(
         "Qwen3_5MoeForConditionalGeneration",
         "vllm_kunlun.models.qwen3_5:Qwen3_5MoeForConditionalGeneration")
 
