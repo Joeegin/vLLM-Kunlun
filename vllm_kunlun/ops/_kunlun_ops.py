@@ -23,6 +23,7 @@ import cocopod  # noqa
 import torch
 import xspeedgate_ops  # noqa
 from vllm.logger import init_logger
+from vllm.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
@@ -494,14 +495,46 @@ class KunlunOps:
                 )
                 return out.sum(1)
 
+            # Allocate two shared workspaces for the large temporary buffers
+            # used by the preprocess, W1, activation, and W2 stages.
+            y_numel = M * moe_top_k * w1.shape[1]
+            out_numel = M * moe_top_k * w2.shape[1]
+            out1_numel = M * moe_top_k * (w1.shape[1] // 2)
+            moe_expand_numel = M * moe_top_k * N
+
+            # Live ranges:
+            #   M * moe_top_k <= 768, M >= 1024:
+            #     workspace_a: out
+            #     workspace_b: y
+            #   M * moe_top_k <= 768, M < 1024:
+            #     workspace_a: out1
+            #     workspace_b: y -> out
+            #   M * moe_top_k > 768, M >= 1024:
+            #     workspace_a: moe_expand -> out
+            #     workspace_b: y
+            #   M * moe_top_k > 768, M < 1024:
+            #     workspace_a: moe_expand -> out1
+            #     workspace_b: y -> out
+            workspace_a_numel = out_numel
+            workspace_b_numel = y_numel
+
+            if M < 1024:
+                workspace_a_numel = out1_numel
+                workspace_b_numel = max(y_numel, out_numel)
+
             if M * moe_top_k > 768:
-                moe_expand = torch.empty(
-                    (M * moe_top_k, N),
-                    dtype=hidden_states.dtype,
-                    device=hidden_states.device,
-                )  # [M*top_k, N], float
+                workspace_a_numel = max(workspace_a_numel, moe_expand_numel)
+
+            workspace_a, workspace_b = current_workspace_manager().get_simultaneous(
+                ((workspace_a_numel,), hidden_states.dtype),
+                ((workspace_b_numel,), hidden_states.dtype),
+            )
+
+            if M * moe_top_k > 768:
                 expert_m = torch.zeros(
-                    global_num_experts, dtype=torch.int32, device=hidden_states.device
+                    global_num_experts,
+                    dtype=torch.int32,
+                    device=hidden_states.device,
                 )  # [E]
                 sorted_tokens_num_lod = torch.zeros(
                     global_num_experts + 1,
@@ -509,8 +542,12 @@ class KunlunOps:
                     device=hidden_states.device,
                 )  # [E+1]
                 sorted_tokens_idx = torch.zeros(
-                    M * moe_top_k, dtype=torch.int32, device=hidden_states.device
+                    M * moe_top_k,
+                    dtype=torch.int32,
+                    device=hidden_states.device,
                 )
+
+                moe_expand = workspace_a[:moe_expand_numel].view(M * moe_top_k, N)
 
                 torch.ops._C.gen_block_statistic(topk_ids, block_statistic)
 
@@ -534,15 +571,8 @@ class KunlunOps:
                     )
                 )
 
-            y = torch.empty(
-                M,
-                moe_top_k,
-                w1.shape[1],
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
-            )
-
-            moe_expand = moe_expand.view(M * moe_top_k, hidden_dim)
+            moe_expand = moe_expand.reshape(M * moe_top_k, hidden_dim)
+            y = workspace_b[:y_numel].view(M, moe_top_k, w1.shape[1])
 
             if M < 1024:
                 torch.ops._C.moe_fc(
@@ -553,13 +583,14 @@ class KunlunOps:
                     moe_topk=moe_top_k,
                     y=y,
                 )
-
-                d = y.shape[-1] // 2
-                output_shape = y.shape[:-1] + (d,)
-                out1 = torch.empty(output_shape, dtype=y.dtype, device=y.device)
+                # Reuse `workspace_a` for `out1` after `moe_expand` is no longer
+                # needed.
+                out1 = workspace_a[:out1_numel].view(M, moe_top_k, w1.shape[1] // 2)
                 torch.ops._C.silu_and_mul(out1, y)
-
                 out1 = out1.reshape(-1, out1.shape[-1])
+                # Reuse `workspace_b` for `out` after `y` has been consumed by
+                # the activation.
+                out = workspace_b[:out_numel].view(M, moe_top_k, w2.shape[1])
             else:
                 torch.ops._C.moe_fc(
                     x=moe_expand,
@@ -573,13 +604,12 @@ class KunlunOps:
 
                 y = y[..., : y.shape[-1] // 2]
                 out1 = y.reshape(-1, y.shape[-1])
+                # Reuse `workspace_a` for `out` after `moe_expand` is no longer
+                # needed.
+                out = workspace_a[:out_numel].view(M, moe_top_k, w2.shape[1])
 
-            out = torch.empty(
-                M,
-                moe_top_k,
-                w2.shape[1],
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
+            dequant_scale = torch.ones(
+                (M, moe_top_k), dtype=torch.float32, device=hidden_states.device
             )
 
             torch.ops._C.moe_fc(
@@ -591,9 +621,6 @@ class KunlunOps:
                 y=out,
             )
 
-            dequant_scale = torch.ones(
-                [M, moe_top_k], dtype=torch.float32, device=out.device
-            )
             output = torch.empty(
                 [M, N], dtype=hidden_states.dtype, device=hidden_states.device
             )
@@ -628,7 +655,6 @@ class KunlunOps:
         x = hidden_states
         batch, hidden_size = x.shape
         num_local_experts, up_gate_size, _ = w13_weight.shape
-
 
         topk_weights = torch.empty(
             batch, top_k, dtype=router_logits.dtype, device=router_logits.device
