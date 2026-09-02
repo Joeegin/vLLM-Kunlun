@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Apply area labels
-        uses: actions/labeler@v6
+        uses: actions/labeler@b8dd2d9be0f68b860e7dae5dae7d772984eacd6d # v6
         with:
           configuration-path: .github/labeler.yml
           sync-labels: false
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Apply semantic labels
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const event = context.eventName;
@@ -41,6 +41,37 @@ jobs:
             const labels = new Set((item.labels || []).map(label => label.name));
             const add = [];
 
+            const labelDefinitions = [
+              { name: 'feature request', color: 'a2eeef', description: 'New feature or request from the feature request form' },
+              { name: 'needs review', color: 'fbca04', description: 'Issue or pull request is ready for maintainer review' },
+              { name: 'area: kunlun-xpu', color: '5319e7', description: 'Kunlun XPU runtime, build, or integration code' },
+              { name: 'area: ci', color: '1d76db', description: 'Continuous integration and repository automation' },
+              { name: 'area: documentation', color: '0075ca', description: 'Documentation, tutorials, or README changes' },
+              { name: 'area: tests', color: 'b60205', description: 'Unit, integration, or end-to-end tests' },
+              { name: 'area: dependencies', color: '0366d6', description: 'Packaging, dependencies, or installation changes' },
+              { name: 'area: performance', color: 'd4c5f9', description: 'Performance, benchmark, latency, or throughput changes' },
+              { name: 'area: examples', color: 'c5def5', description: 'Examples, demos, or community utilities' }
+            ];
+
+            for (const definition of labelDefinitions) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: definition.name
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: definition.name,
+                  color: definition.color,
+                  description: definition.description
+                });
+              }
+            }
+
             const rules = [
               { label: 'bug', patterns: [/\bbug\b/, /error/, /exception/, /crash/, /fail/, /regression/] },
               { label: 'documentation', patterns: [/\bdocs?\b/, /documentation/, /readme/, /tutorial/] },
@@ -48,7 +79,8 @@ jobs:
               { label: 'question', patterns: [/\bquestion\b/, /how do i/, /how can i/, /请问/, /咨询/] },
               { label: 'area: performance', patterns: [/performance/, /benchmark/, /latency/, /throughput/, /speedup/, /性能/, /延迟/] },
               { label: 'area: dependencies', patterns: [/dependenc/, /requirements/, /install/, /package/, /版本/] },
-              { label: 'area: tests', patterns: [/test/, /pytest/, /ci/, /continuous integration/, /测试/] },
+              { label: 'area: ci', patterns: [/\bci\b/, /continuous integration/, /github actions/, /workflow/, /测试流水线/] },
+              { label: 'area: tests', patterns: [/\btest\b/, /pytest/, /unit test/, /integration test/, /e2e/, /测试/] },
               { label: 'area: kunlun-xpu', patterns: [/kunlun/, /xpu/, /p800/, /mlu/, /昆仑/] }
             ];
 

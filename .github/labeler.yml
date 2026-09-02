@@ -4,7 +4,6 @@
           - "vllm_kunlun/**"
           - "build.sh"
           - "setup_env.sh"
-          - "collect_env.py"
 
 "area: ci":
   - changed-files:
