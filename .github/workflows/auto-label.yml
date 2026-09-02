@@ -59,11 +59,21 @@ jobs:
 
             for (const definition of labelDefinitions) {
               try {
-                await github.rest.issues.getLabel({
+                const existing = await github.rest.issues.getLabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   name: definition.name
                 });
+                if (existing.data.color !== definition.color ||
+                    (existing.data.description || '') !== definition.description) {
+                  await github.rest.issues.updateLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    name: definition.name,
+                    color: definition.color,
+                    description: definition.description
+                  });
+                }
               } catch (error) {
                 if (error.status !== 404) throw error;
                 try {
@@ -84,6 +94,7 @@ jobs:
             const rules = [
               { label: 'bug', patterns: [/\bbug\b/, /error/, /exception/, /crash/, /fail/, /regression/] },
               { label: 'documentation', patterns: [/\bdocs?\b/, /documentation/, /readme/, /tutorial/] },
+              { label: 'feature request', patterns: [/feature request/, /propose a new feature/, /new feature/] },
               { label: 'enhancement', patterns: [/feature/, /enhancement/, /support .*model/, /add .*support/] },
               { label: 'question', patterns: [/\bquestion\b/, /how do i/, /how can i/, /请问/, /咨询/] },
               { label: 'area: performance', patterns: [/performance/, /benchmark/, /latency/, /throughput/, /speedup/, /性能/, /延迟/] },
