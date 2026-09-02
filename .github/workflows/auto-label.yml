@@ -14,6 +14,7 @@ permissions:
 jobs:
   label-by-files:
     name: Label pull request by changed files
+    needs: label-by-content
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
