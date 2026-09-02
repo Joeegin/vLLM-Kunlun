@@ -3,12 +3,14 @@
 <p align="center">
   <a href="https://vllm-kunlun.readthedocs.io/en/latest/"><b>  Documentation</b></a> |
   <a href="https://vllm-kunlun.readthedocs.io/en/latest/quick_start.html"><b>  Quick Start</b></a> |
+  <a href="https://vllm-kunlun.com/"><b>  Community Website</b></a> |
   <a href="https://join.slack.com/t/vllm-kunlun/shared_invite/zt-3iinb8u5z-FcqZKbNNdMJ_32fHmipzvw"><b>  Slack</b></a>
 </p>
 
 ---
 
 ## Latest News 🔥
+- [2026/09] The [vLLM-Kunlun community website](https://vllm-kunlun.com/) is now live. Visit it for project updates, model support, performance benchmarks, installation guidance, and XPU operator artifacts.
 - [2025/12] Initial release of vLLM Kunlun
 
 ---
